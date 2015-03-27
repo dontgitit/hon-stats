@@ -15,3 +15,5 @@ dist
 /.settings
 test
 *~
+conf/token.conf
+nohup.out
