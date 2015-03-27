@@ -1,0 +1,13 @@
+@(matchForm: Form[String])
+
+@import helper._
+
+@main("Welcome to Play") {
+
+    <h1>HoN statistics<h1>
+    @form(routes.Application.matchStats) {
+        @inputText(matchForm("id"))
+        <input type="submit" value="Look up!">
+    }
+
+}

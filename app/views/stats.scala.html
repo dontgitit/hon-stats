@@ -1,0 +1,114 @@
+@(legion: Seq[PlayerMatchStatistics], hb: Seq[PlayerMatchStatistics], matchStats: play.api.libs.json.JsValue)
+
+@import helper._
+@import play.api.libs.json._
+
+@js = {
+
+  <script type="text/javascript">
+
+  function output(inp) {
+    document.body.appendChild(document.createElement('pre')).innerHTML = inp;
+  } 
+
+  // http://stackoverflow.com/questions/4810841/how-can-i-pretty-print-json-using-javascript
+  function syntaxHighlight(json) {
+    json = json.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+    return json.replace(/("(\\u[a-zA-Z0-9]{4}|\\[^u]|[^\\"])*"(\s*:)?|\b(true|false|null)\b|-?\d+(?:\.\d*)?(?:[eE][+\-]?\d+)?)/g, function (match) {
+        var cls = 'number';
+        if (/^"/.test(match)) {
+          if (/:$/.test(match)) {
+            cls = 'key';
+          } else {
+            cls = 'string';
+          }
+        } else if (/true|false/.test(match)) {
+          cls = 'boolean';
+        } else if (/null/.test(match)) {
+          cls = 'null';
+        }
+        return '<span class="' + cls + '">' + match + '</span>';
+    });
+  }
+
+$(document).ready(function(){
+
+  function makePieChart(div, data, title) {
+    var total = 0;
+    $(data).map(function(){total += this[1];})
+    var dataLabels = $.makeArray($(data).map(function(){return this[1] + " (" + Math.round(this[1]/total * 100) + "%)";}));
+
+    jQuery.jqplot (div, [data], 
+      { 
+        title: title,
+        seriesDefaults: {
+          // Make this a pie chart.
+          renderer: jQuery.jqplot.PieRenderer, 
+          rendererOptions: {
+            // Put data labels on the pie slices.
+            // By default, labels show the percentage of the slice.
+            showDataLabels: true,
+            dataLabels: dataLabels
+          }
+        }, 
+        legend: { show:true, location: 'e' }
+      }
+    );
+  }
+
+  var teamHeroDmg = [
+    ['Legion', @legion.map(_.herodmg).sum],
+    ['Hellbourne', @hb.map(_.herodmg).sum],
+  ];
+  makePieChart('teamHeroDmg', teamHeroDmg, "Team Hero Damage")
+
+  var teamBDmg = [
+    ['Legion', @legion.map(_.bdmg).sum],
+    ['Hellbourne', @hb.map(_.bdmg).sum],
+  ];
+  makePieChart('teamBDmg', teamBDmg, "Team Building Damage");
+
+  var legionHeroDmg = @Html(Json.stringify(Json.toJson(legion.map { p => Json.arr(p.nickname + " (" + p.hero.disp_name + ")", p.herodmg) } )));
+  makePieChart('legionHeroDmg', legionHeroDmg, "Legion Hero Damage");
+
+  var hbHeroDmg = @Html(Json.stringify(Json.toJson(hb.map { p => Json.arr(p.nickname + " (" + p.hero.disp_name + ")", p.herodmg) } )));
+  makePieChart('hbHeroDmg', hbHeroDmg, "HellBourne Hero Damage");
+
+  var legionBDmg = @Html(Json.stringify(Json.toJson(legion.map { p => Json.arr(p.nickname + " (" + p.hero.disp_name + ")", p.bdmg) } )));
+  makePieChart('legionBDmg', legionBDmg, "Legion Building Damage");
+
+  var hbBDmg = @Html(Json.stringify(Json.toJson(hb.map { p => Json.arr(p.nickname + " (" + p.hero.disp_name + ")", p.bdmg) } )));
+  makePieChart('hbBDmg', hbBDmg, "Hellbourne Building Damage");
+
+  var rawJsonPre = $("#rawJsonPre");
+  rawJsonPre.html(syntaxHighlight(rawJsonPre.html()));
+
+  $("#rawJsonData").accordion({
+    collapsible: true,
+    active: false
+  });
+
+});
+ 
+  </script>
+
+}
+
+@main("Welcome to HoN stats", js) {
+
+    <div id="teamHeroDmg" style="height:300px; width:500px;"></div>
+    <div id="teamBDmg" style="height:300px; width:500px;"></div>
+
+    <div id="legionHeroDmg" style="height:300px; width:500px;"></div>
+    <div id="hbHeroDmg" style="height:300px; width:500px;"></div>
+
+    <div id="legionBDmg" style="height:300px; width:500px;"></div>
+    <div id="hbBDmg" style="height:300px; width:500px;"></div>
+
+    <div id="rawJsonData">
+        <h3>Raw json data</h3>
+        <div>
+	    <pre id="rawJsonPre">@{Json.prettyPrint(matchStats)}</pre>
+        </div>
+    </div>
+}
