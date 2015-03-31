@@ -1,5 +1,7 @@
 package controllers
 
+import java.util.concurrent.{SynchronousQueue, TimeUnit, ThreadPoolExecutor}
+
 import models._
 import play.api._
 import play.api.mvc._
@@ -8,14 +10,26 @@ import play.api.data.Forms._
 
 import play.api.libs.ws._
 import scala.concurrent.duration.Duration
-import scala.concurrent.{Await, Future}
+import scala.concurrent.{Await, ExecutionContext, Future}
 
 import play.api.libs.json._
 import play.api.Play
-import scala.concurrent.ExecutionContext.Implicits.global
+//import scala.concurrent.ExecutionContext.Implicits.global
 
 
 object Application extends Controller {
+  lazy val executor =
+    new ThreadPoolExecutor(
+      0,
+      5000, // 5000 threads, maxes out at ~10K queues per second, up to 500K queues at a time - dies after for some reason
+      60L,
+      TimeUnit.SECONDS,
+      new SynchronousQueue[Runnable]()
+    )
+
+  implicit val myExecutionContext: ExecutionContext =
+    ExecutionContext.fromExecutorService(executor)
+
   lazy val honApiToken = Play.current.configuration.getString("hon-api-token").getOrElse(throw new IllegalArgumentException(s"You must provide an api token using 'hon-api-token' in application config!"))
 
   val matchForm = Form(
@@ -45,23 +59,91 @@ object Application extends Controller {
       }
     }
   }
-  lazy val heroes = Await.result(getHeroes, Duration.Inf)
+  val heroes = Await.result(getHeroes, Duration.Inf)
+
+  def getItemIdNames = {
+    Console.println(s"getting item id names...")
+    val holder = WS.url(s"https://api.heroesofnewerth.com/items/all/?token=$honApiToken")
+    val response = holder.get
+    response.map { r =>
+      r.json.as[JsObject].keys
+    }
+  }
+  val itemIdNames = Await.result(getItemIdNames, Duration.Inf)
+
+  def getItem(name: String, isRetry: Boolean = false): Future[Option[HoNItem]] = {
+    val url = s"https://api.heroesofnewerth.com/items/name/$name/?token=$honApiToken"
+    if (isRetry) Console.println(s"getting item $name from $url")
+    val holder = WS.url(url)
+    val ft = holder.get().flatMap { response =>
+      if (isRetry) Console.println(s"got response ${response.body} with status ${response.status} for item $name")
+      response.status match {
+        case http.Status.NOT_FOUND =>
+          Console.println(s"$name not found; must be old item")
+          Future.successful(None)
+
+        case http.Status.TOO_MANY_REQUEST =>
+          val sleepSecs = 5
+          Console.println(s"getting throttled in $name; sleeping for $sleepSecs seconds")
+          Thread.sleep(sleepSecs * 1000)
+          Console.println(s"woke up in $name!")
+          val ft = getItem(name, true).map { innerItem =>
+            Console.println(s"inner ft is $innerItem")
+            innerItem
+          }
+          Console.println(s"created future")
+          ft.onFailure { case t: Throwable =>
+            Console.println(s"Inner ft failed for $name; $t")
+          }
+          ft
+
+        case _ =>
+          val ftthing = Future {
+            val item = response.json.as[HoNItem]
+//            Console.println(s"returning item: $item")
+            Some(item)
+          }
+          ftthing.onFailure { case t: Throwable =>
+            Console.println(s"ft failed: $t")
+          }
+          ftthing
+      }
+    }
+    ft.onFailure { case t: Throwable =>
+      Console.println(s"Failed to get item $name; $t")
+    }
+    ft
+  }
+
+  val items = {
+    val fts = itemIdNames.map { itemIdName => getItem(itemIdName) }
+    val ft = Future.sequence(fts)
+    Await.result(ft, Duration.Inf).filter(_.nonEmpty).map { itemOpt =>
+      itemOpt.get.item_id -> itemOpt.get
+    }.toMap
+  }
 
   protected def augmentStats(stats: JsObject) = {
     val heroId = (stats \ ApiFields.hero_id.toString).as[String]
+
+    val itemSlotNames = 1.to(6).map { slotNumber =>
+      val slotValue = (stats \ s"slot_$slotNumber")
+      slotNumber -> slotValue.asOpt[String]
+    }.filter(_._2.nonEmpty).map { case (slotNumber, slotOpt) =>
+      s"slot_${slotNumber}_name" -> items(slotOpt.get).attributes.name
+    }.toMap
+
     stats.+("hero_name", Json.toJson(heroes(heroId).disp_name))
+         .++(Json.toJson(itemSlotNames).as[JsObject])
   }
 
   def matchStatsToAugmentedPlayerData(matchStats: MatchStats): Seq[JsObject] = {
-    val playerData = matchStats.playerInventories.map { player =>
+    matchStats.playerInventories.map { player =>
       val stats = matchStats.playerMatchStatisticsStrings.find { playerStatsData =>
         (playerStatsData \ ApiFields.account_id.toString).as[String] == player.account_id
       }.head
-      val augmentedStats = augmentStats(stats)
-      player -> augmentedStats
-    }
-    playerData.map { case (inventory, other) =>
-      Json.toJson(inventory).as[JsObject] ++ other
+      val mixedData = Json.toJson(player).as[JsObject] ++ stats
+      augmentStats(mixedData)
     }
   }
 
