@@ -1,5 +1,6 @@
 package controllers
 
+import models.{Team, PlayerMatchStatisticsStrings, Hero}
 import play.api._
 import play.api.mvc._
 import play.api.data._
@@ -12,49 +13,9 @@ import play.api.libs.json._
 import play.api.Play
 import scala.concurrent.ExecutionContext.Implicits.global
 
-case class Hero(
-  hero_id: String,
-  disp_name: String
-)
-object Hero {
-  implicit val heroFormat = Json.format[Hero]
-}
-
-case class PlayerMatchStatistics(
-  herodmg: Long,
-  bdmg: Long,
-  team: String,
-  nickname: String,
-  hero: Hero
-)
-object PlayerMatchStatistics {
-  implicit val playerMatchStatisticsFormat = Json.format[PlayerMatchStatistics]
-}
-
-case class PlayerMatchStatisticsStrings(
-  herodmg: String,
-  bdmg: String,
-  team: String,
-  nickname: String,
-  hero_id: String
-) {
-  def toPlayerMatchStatistics(heroes: Map[String, Hero]) = {
-    val teamName = team match {
-      case "1" => Application.LEGION
-      case "2" => Application.HELLBOURNE
-    }
-    PlayerMatchStatistics(herodmg.toLong, bdmg.toLong, teamName, nickname, heroes(hero_id))
-  }
-}
-object PlayerMatchStatisticsStrings {
-  implicit val playerMatchStatisticsStringsFormat = Json.format[PlayerMatchStatisticsStrings]
-}
 
 object Application extends Controller {
   lazy val honApiToken = Play.current.configuration.getString("hon-api-token").getOrElse(throw new IllegalArgumentException(s"You must provide an api token using 'hon-api-token' in application config!"))
-
-  val LEGION = "Legion"
-  val HELLBOURNE = "Hellbourne"
 
   val matchForm = Form(
     "id" -> nonEmptyText
@@ -90,7 +51,7 @@ object Application extends Controller {
           val playerStatsStrings = Json.fromJson[Seq[PlayerMatchStatisticsStrings]](stats).get
           getHeroes.map { heroes =>
             val playerStats = playerStatsStrings.map(_.toPlayerMatchStatistics(heroes))
-            val (legionStats, hellbourneStats) = playerStats.partition(_.team == LEGION)
+            val (legionStats, hellbourneStats) = playerStats.partition(_.team == Team.Legion)
 
             Ok(views.html.stats(legionStats, hellbourneStats, matchStats))
           }
