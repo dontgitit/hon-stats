@@ -1,6 +1,6 @@
 package controllers
 
-import models.{Team, PlayerMatchStatisticsStrings, Hero}
+import models._
 import play.api._
 import play.api.mvc._
 import play.api.data._
@@ -25,10 +25,12 @@ object Application extends Controller {
     Ok(views.html.index(matchForm))
   }
 
-  def getMatchStats(matchId: String): Future[JsValue] = {
+  def getMatchStats(matchId: String): Future[MatchStats] = {
     val holder = WS.url(s"https://api.heroesofnewerth.com//match/all/matchid/$matchId/?token=$honApiToken")
-    val response = holder.get
-    response.map(_.json)
+    val responseFt = holder.get
+    responseFt.map { response =>
+      MatchStats.fromSingleMatchStats(response.json)
+    }
   }
 
   def getHeroes: Future[Map[String, Hero]] = {
@@ -46,14 +48,14 @@ object Application extends Controller {
       errors => Future.successful(BadRequest(views.html.index(errors))),
       id => {
         getMatchStats(id).flatMap { matchStats =>
-          val matchStatsAsArray = matchStats.as[JsArray]
-          val stats = matchStatsAsArray(2)
-          val playerStatsStrings = Json.fromJson[Seq[PlayerMatchStatisticsStrings]](stats).get
+          val playerStatsStrings = matchStats.playerMatchStatisticsStrings
           getHeroes.map { heroes =>
-            val playerStats = playerStatsStrings.map(_.toPlayerMatchStatistics(heroes))
+            val playerStats = playerStatsStrings.map { pss =>
+              PlayerMatchStatistics.fromPlayerMatchStatisticsJs(pss, heroes)
+            }
             val (legionStats, hellbourneStats) = playerStats.partition(_.team == Team.Legion)
 
-            Ok(views.html.stats(legionStats, hellbourneStats, matchStats))
+            Ok(views.html.stats(legionStats, hellbourneStats))
           }
         }
       }

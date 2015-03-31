@@ -1,4 +1,4 @@
-@(legion: Seq[PlayerMatchStatistics], hb: Seq[PlayerMatchStatistics], matchStats: play.api.libs.json.JsValue)
+@(legion: Seq[PlayerMatchStatistics], hb: Seq[PlayerMatchStatistics])
 
 @import helper._
 @import play.api.libs.json._
@@ -83,10 +83,12 @@ $(document).ready(function(){
   var rawJsonPre = $("#rawJsonPre");
   rawJsonPre.html(syntaxHighlight(rawJsonPre.html()));
 
+  /**
   $("#rawJsonData").accordion({
     collapsible: true,
     active: false
   });
+  **/
 
 });
  
@@ -105,10 +107,10 @@ $(document).ready(function(){
     <div id="legionBDmg" style="height:300px; width:500px;"></div>
     <div id="hbBDmg" style="height:300px; width:500px;"></div>
 
-    <div id="rawJsonData">
-        <h3>Raw json data</h3>
-        <div>
-	    <pre id="rawJsonPre">@{Json.prettyPrint(matchStats)}</pre>
-        </div>
-    </div>
+    <!--<div id="rawJsonData">-->
+        <!--<h3>Raw json data</h3>-->
+        <!--<div>-->
+	    <!--<pre id="rawJsonPre">@{Json.prettyPrint(Json.toJson("match stats here"))}</pre>-->
+        <!--</div>-->
+    <!--</div>-->
 }
