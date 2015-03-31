@@ -44,10 +44,15 @@ object Application extends Controller {
     val holder = WS.url(s"https://api.heroesofnewerth.com//match/all/matchid/$matchId/?token=$honApiToken")
     val responseFt = holder.get
     responseFt.map { response =>
-      MatchStats.fromSingleMatchStats(response.json)
+      try {
+        MatchStats.fromSingleMatchStats(response.json)
+      } catch {
+        case t: Throwable =>
+          Console.println(s"Unable to parse match stats; got body ${response.body}")
+          throw t
+      }
     }
   }
-
 
   def getHeroes: Future[Map[String, Hero]] = {
     Console.println(s"getting heroes...")
@@ -59,7 +64,7 @@ object Application extends Controller {
       }
     }
   }
-  val heroes = Await.result(getHeroes, Duration.Inf)
+  lazy val heroes = Await.result(getHeroes, Duration.Inf)
 
   def getItemIdNames = {
     Console.println(s"getting item id names...")
@@ -69,29 +74,22 @@ object Application extends Controller {
       r.json.as[JsObject].keys
     }
   }
-  val itemIdNames = Await.result(getItemIdNames, Duration.Inf)
+  lazy val itemIdNames = Await.result(getItemIdNames, Duration.Inf)
 
-  def getItem(name: String, isRetry: Boolean = false): Future[Option[HoNItem]] = {
+  def getItem(name: String): Future[Option[HoNItem]] = {
     val url = s"https://api.heroesofnewerth.com/items/name/$name/?token=$honApiToken"
-    if (isRetry) Console.println(s"getting item $name from $url")
     val holder = WS.url(url)
     val ft = holder.get().flatMap { response =>
-      if (isRetry) Console.println(s"got response ${response.body} with status ${response.status} for item $name")
       response.status match {
         case http.Status.NOT_FOUND =>
           Console.println(s"$name not found; must be old item")
           Future.successful(None)
 
         case http.Status.TOO_MANY_REQUEST =>
-          val sleepSecs = 5
+          val sleepSecs = 15
           Console.println(s"getting throttled in $name; sleeping for $sleepSecs seconds")
           Thread.sleep(sleepSecs * 1000)
-          Console.println(s"woke up in $name!")
-          val ft = getItem(name, true).map { innerItem =>
-            Console.println(s"inner ft is $innerItem")
-            innerItem
-          }
-          Console.println(s"created future")
+          val ft = getItem(name)
           ft.onFailure { case t: Throwable =>
             Console.println(s"Inner ft failed for $name; $t")
           }
@@ -99,9 +97,7 @@ object Application extends Controller {
 
         case _ =>
           val ftthing = Future {
-            val item = response.json.as[HoNItem]
-//            Console.println(s"returning item: $item")
-            Some(item)
+            Some(response.json.as[HoNItem])
           }
           ftthing.onFailure { case t: Throwable =>
             Console.println(s"ft failed: $t")
@@ -115,7 +111,7 @@ object Application extends Controller {
     ft
   }
 
-  val items = {
+  lazy val items = {
     val fts = itemIdNames.map { itemIdName => getItem(itemIdName) }
     val ft = Future.sequence(fts)
     Await.result(ft, Duration.Inf).filter(_.nonEmpty).map { itemOpt =>
@@ -127,7 +123,7 @@ object Application extends Controller {
     val heroId = (stats \ ApiFields.hero_id.toString).as[String]
 
     val itemSlotNames = 1.to(6).map { slotNumber =>
-      val slotValue = (stats \ s"slot_$slotNumber")
+      val slotValue = stats \ s"slot_$slotNumber"
       slotNumber -> slotValue.asOpt[String]
     }.filter(_._2.nonEmpty).map { case (slotNumber, slotOpt) =>
       s"slot_${slotNumber}_name" -> items(slotOpt.get).attributes.name
