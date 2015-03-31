@@ -54,7 +54,7 @@ object Application extends Controller {
 
   val matchForm = Form(
     "id" -> nonEmptyText
-  )       
+  )
 
   def index = Action {
     Ok(views.html.index(matchForm))
@@ -66,10 +66,10 @@ object Application extends Controller {
     response.map(_.json)
   }
 
-  def getHeroes(): Future[Map[String, Hero]] = {
+  def getHeroes: Future[Map[String, Hero]] = {
     val holder = WS.url(s"https://api.heroesofnewerth.com/heroes/all?token=$honApiToken")
     val response = holder.get
-    response.map { r => 
+    response.map { r =>
       Json.fromJson[Map[String, Map[String, Hero]]](r.json).get.map { case (heroName, heroIdToHero) =>
         heroIdToHero.head
       }
@@ -81,16 +81,16 @@ object Application extends Controller {
       errors => Future.successful(BadRequest(views.html.index(errors))),
       id => {
         getMatchStats(id).flatMap { matchStats =>
-	  val matchStatsAsArray = matchStats.as[JsArray]
-	  val stats = matchStatsAsArray(2)
+          val matchStatsAsArray = matchStats.as[JsArray]
+          val stats = matchStatsAsArray(2)
           val playerStatsStrings = Json.fromJson[Seq[PlayerMatchStatisticsStrings]](stats).get
-	  getHeroes.map { heroes =>
+          getHeroes.map { heroes =>
             val playerStats = playerStatsStrings.map(_.toPlayerMatchStatistics(heroes))
-	    val (legionStats, hellbourneStats) = playerStats.partition(_.team == LEGION)
-	  
-	    Ok(views.html.stats(legionStats, hellbourneStats, matchStats))
-	  }
-	}
+            val (legionStats, hellbourneStats) = playerStats.partition(_.team == LEGION)
+
+            Ok(views.html.stats(legionStats, hellbourneStats, matchStats))
+          }
+        }
       }
     )
   }
