@@ -5,6 +5,7 @@
 # Home page
 GET     /                           controllers.Application.index
 GET     /matchStats                 controllers.Application.matchStats
+GET     /matchCsv/:id               controllers.Application.matchCsv(id: String)
 
 # Map static resources from the /public folder to the /assets URL path
 GET     /assets/*file               controllers.Assets.at(path="/public", file)

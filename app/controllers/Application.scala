@@ -7,7 +7,8 @@ import play.api.data._
 import play.api.data.Forms._
 
 import play.api.libs.ws._
-import scala.concurrent.Future
+import scala.concurrent.duration.Duration
+import scala.concurrent.{Await, Future}
 
 import play.api.libs.json._
 import play.api.Play
@@ -33,7 +34,9 @@ object Application extends Controller {
     }
   }
 
+
   def getHeroes: Future[Map[String, Hero]] = {
+    Console.println(s"getting heroes...")
     val holder = WS.url(s"https://api.heroesofnewerth.com/heroes/all?token=$honApiToken")
     val response = holder.get
     response.map { r =>
@@ -42,24 +45,66 @@ object Application extends Controller {
       }
     }
   }
+  lazy val heroes = Await.result(getHeroes, Duration.Inf)
+
+  protected def augmentStats(stats: JsObject) = {
+    val heroId = (stats \ ApiFields.hero_id.toString).as[String]
+    stats.+("hero_name", Json.toJson(heroes(heroId).disp_name))
+  }
+
+  def matchStatsToAugmentedPlayerData(matchStats: MatchStats): Seq[JsObject] = {
+    val playerData = matchStats.playerInventories.map { player =>
+      val stats = matchStats.playerMatchStatisticsStrings.find { playerStatsData =>
+        (playerStatsData \ ApiFields.account_id.toString).as[String] == player.account_id
+      }.head
+      val augmentedStats = augmentStats(stats)
+      player -> augmentedStats
+    }
+    playerData.map { case (inventory, other) =>
+      Json.toJson(inventory).as[JsObject] ++ other
+    }
+  }
 
   def matchStats = Action.async { implicit request =>
     matchForm.bindFromRequest.fold(
       errors => Future.successful(BadRequest(views.html.index(errors))),
       id => {
-        getMatchStats(id).flatMap { matchStats =>
+        getMatchStats(id).map { matchStats =>
           val playerStatsStrings = matchStats.playerMatchStatisticsStrings
-          getHeroes.map { heroes =>
-            val playerStats = playerStatsStrings.map { pss =>
-              PlayerMatchStatistics.fromPlayerMatchStatisticsJs(pss, heroes)
-            }
-            val (legionStats, hellbourneStats) = playerStats.partition(_.team == Team.Legion)
-
-            Ok(views.html.stats(legionStats, hellbourneStats))
+          val playerStats = playerStatsStrings.map { pss =>
+            PlayerMatchStatistics.fromPlayerMatchStatisticsJs(pss, heroes)
           }
+          val (legionStats, hellbourneStats) = playerStats.partition(_.team == Team.Legion)
+
+          Ok(views.html.stats(legionStats, hellbourneStats))
         }
       }
     )
+  }
+
+  def playerDataToCsv(playerData: Seq[JsObject]) = {
+    val headers = playerData.map(_.keys).flatten.toSet.toList.sorted
+    val headerRow = headers.mkString(",")
+    val playerRows = playerData.map { pd =>
+      val rowVals = headers.map { key =>
+        (pd \ key).asOpt[String].getOrElse("")
+      }
+      rowVals.mkString(",")
+    }
+    val rows = Seq(headerRow) ++ playerRows
+    rows.mkString("\n") + "\n"
+  }
+
+  def matchCsv(id: String) = Action.async { implicit request =>
+    getMatchStats(id).map { matchStats =>
+      val playerData = matchStatsToAugmentedPlayerData(matchStats)
+      val csvData = playerDataToCsv(playerData)
+      val fileName = s"hon_$id.csv"
+      Ok(csvData).withHeaders(
+        CONTENT_TYPE -> "text/csv",
+        CONTENT_DISPOSITION -> ("attachment; filename=\"" + fileName + "\"")
+      )
+    }
   }
 
 }
