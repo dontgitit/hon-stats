@@ -16,6 +16,9 @@ case class Hero(
   hero_id: String,
   disp_name: String
 )
+object Hero {
+  implicit val heroFormat = Json.format[Hero]
+}
 
 case class PlayerMatchStatistics(
   herodmg: Long,
@@ -24,6 +27,9 @@ case class PlayerMatchStatistics(
   nickname: String,
   hero: Hero
 )
+object PlayerMatchStatistics {
+  implicit val playerMatchStatisticsFormat = Json.format[PlayerMatchStatistics]
+}
 
 case class PlayerMatchStatisticsStrings(
   herodmg: String,
@@ -40,13 +46,11 @@ case class PlayerMatchStatisticsStrings(
     PlayerMatchStatistics(herodmg.toLong, bdmg.toLong, teamName, nickname, heroes(hero_id))
   }
 }
+object PlayerMatchStatisticsStrings {
+  implicit val playerMatchStatisticsStringsFormat = Json.format[PlayerMatchStatisticsStrings]
+}
 
 object Application extends Controller {
-
-  implicit val heroFormat = Json.format[Hero]
-  implicit val playerMatchStatisticsStringsFormat = Json.format[PlayerMatchStatisticsStrings]
-  implicit val playerMatchStatisticsFormat = Json.format[PlayerMatchStatistics]
-
   lazy val honApiToken = Play.current.configuration.getString("hon-api-token").getOrElse(throw new IllegalArgumentException(s"You must provide an api token using 'hon-api-token' in application config!"))
 
   val LEGION = "Legion"
