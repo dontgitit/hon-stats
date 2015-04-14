@@ -114,9 +114,14 @@ object Application extends Controller {
   lazy val items = {
     val fts = itemIdNames.map { itemIdName => getItem(itemIdName) }
     val ft = Future.sequence(fts)
-    Await.result(ft, Duration.Inf).filter(_.nonEmpty).map { itemOpt =>
+    val mostItems = Await.result(ft, Duration.Inf).filter(_.nonEmpty).map { itemOpt =>
       itemOpt.get.item_id -> itemOpt.get
     }.toMap
+    val mm = collection.mutable.Map(mostItems.toSeq: _*)
+    mm.getOrElseUpdate("150", HoNItem(item_id = "150", attributes = HoNItemAttributes(icon = "", name = "Ioyn Stone")))
+    mm.getOrElseUpdate("151", HoNItem(item_id = "151", attributes = HoNItemAttributes(icon = "", name = "Spell Sunder")))
+    mm.getOrElseUpdate("152", HoNItem(item_id = "152", attributes = HoNItemAttributes(icon = "", name = "Veiled Rot")))
+    collection.immutable.Map(mm.toSeq: _*)
   }
 
   protected def augmentStats(stats: JsObject) = {
