@@ -117,11 +117,12 @@ object Application extends Controller {
     val mostItems = Await.result(ft, Duration.Inf).filter(_.nonEmpty).map { itemOpt =>
       itemOpt.get.item_id -> itemOpt.get
     }.toMap
-    val mm = collection.mutable.Map(mostItems.toSeq: _*)
-    mm.getOrElseUpdate("150", HoNItem(item_id = "150", attributes = HoNItemAttributes(icon = "", name = "Ioyn Stone")))
-    mm.getOrElseUpdate("151", HoNItem(item_id = "151", attributes = HoNItemAttributes(icon = "", name = "Spell Sunder")))
-    mm.getOrElseUpdate("152", HoNItem(item_id = "152", attributes = HoNItemAttributes(icon = "", name = "Veiled Rot")))
-    collection.immutable.Map(mm.toSeq: _*)
+    Map(
+      "150" -> HoNItem(item_id = "150", attributes = HoNItemAttributes(icon = "", name = "Ioyn Stone")),
+      "151" -> HoNItem(item_id = "151", attributes = HoNItemAttributes(icon = "", name = "Spell Sunder")),
+      "152" -> HoNItem(item_id = "152", attributes = HoNItemAttributes(icon = "", name = "Veiled Rot")),
+      "168" -> HoNItem(item_id = "168", attributes = HoNItemAttributes(icon = "", name = "Merrick's Bounty"))
+    ) ++ mostItems
   }
 
   protected def augmentStats(stats: JsObject) = {
